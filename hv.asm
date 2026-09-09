@@ -201,14 +201,15 @@ vmwrite rax, rdx
 
     ;----- HOST FINISH DEBUGGING ONLY -----
 
-;----------------- GUEST -------------
-
+;----------------- GUEST INITIALIZATION AND VMCS CONFIGURATION -------------
 
 Guest_area:
-    ;IDT
-    sub rsp, 16                  ;  (Long Mode Alignment)
+    ; -------------------------------------------------------------------------
+    ; Part 1: Intercepting and Storing the Guest IDTR Base Address
+    ; -------------------------------------------------------------------------
+    sub rsp, 16                  ; Enforce Long Mode Stack Alignment
     sidt [rsp]                   
-    mov rbx, [rsp + 2]           ; Base Address IDTR
+    mov rbx, [rsp + 2]           ; Extract IDTR Base Address
     add rsp, 16              
 
     mov eax, 0x00006818          ; VMCS_GUEST_IDTR_BASE 
@@ -231,11 +232,11 @@ Guest_area:
     xor ebx, ebx                 
     vmwrite rax, rbx            
 
-    ; =========================================================================
-    ; חלק 2: הגדרת כתובות כניסה (RIP), מחסנית (RSP) ודגלי החומרה (RFLAGS)
-    ; =========================================================================
+    ; -------------------------------------------------------------------------
+    ; Part 2: Enforcing Instruction Pointer (RIP), Stack Pointer (RSP), and RFLAGS
+    ; -------------------------------------------------------------------------
     mov eax, 0x0000681E          ; VMCS_GUEST_RIP 
-    lea rbx, [rel Guest_Code_Entry]     ; <----------------- MISTAKE FORGOT REL 
+    lea rbx, [rel Guest_Code_Entry]     ; Enforce RIP-Relative addressing to prevent memory shifting
     vmwrite rax, rbx            
 
     mov eax, 0x0000681C          ; VMCS_GUEST_RSP 
@@ -246,9 +247,9 @@ Guest_area:
     mov ebx, 0x00000002          
     vmwrite rax, rbx           
 
-    ; =========================================================================
-    ; חלק 3: חוקי אבטחה והרשאות זיכרון של הסגמנטים (Access Rights)              ; CHECK
-    ; =========================================================================
+    ; -------------------------------------------------------------------------
+    ; Part 3: Architecting Segment Isolation & Access Rights Protection Rules
+    ; -------------------------------------------------------------------------
     mov eax, 0x00004816          ; VMCS_GUEST_CS_ACCESS_RIGHTS
     mov ebx, 0x0000209B          
     vmwrite rax, rbx            
@@ -257,24 +258,24 @@ Guest_area:
     mov ebx, 0x00004093         
     vmwrite rax, rbx
 
-    mov ebx, 0x00010000          ;(Unusable Segments Flag)
+    mov ebx, 0x00010000          ; Initialize Unusable Segments Attribute Flag
     mov eax, 0x00004812          ; VMCS_GUEST_ES_ACCESS_RIGHTS 
     mov ecx, 5                  
 
 .compact_destroy_loop:
     vmwrite rax, rbx       
     add eax, 2               
-    cmp eax, 0x00004814          ; CS_AR
+    cmp eax, 0x00004814          ; CS_AR Boundary Check
     jne .skip_cs_protection
-    add eax, 4                   ;CS SS                  
+    add eax, 4                   ; Bypass CS and SS Protections Override                 
 .skip_cs_protection:
     loop .compact_destroy_loop
 
-    ; =========================================================================
-    ; חלק 4: חקיקת רגיסטרי הסלקטורים (Selectors) בסיליקון
-    ; =========================================================================
+    ; -------------------------------------------------------------------------
+    ; Part 4: Forcing Hardware Segment Selector Constraints via Silicon Register Mapping
+    ; -------------------------------------------------------------------------
     mov rbx, cs
-    and rbx, ~3                  
+    and rbx, ~3                  ; Sanitize CPL/RPL Privilege Bits
 
     mov eax, 0x00000802          ; VMCS_GUEST_CS_SELECTOR
     vmwrite rax, rbx
@@ -306,11 +307,11 @@ Guest_area:
     mov eax, 0x00000812          ; VMCS_GUEST_PML_INDEX
     vmwrite rax, rcx
 
-    ; =========================================================================
-    ; חלק 5: הגדרת שדות 64-ביט משניים (Hex Dumps) של הברזלים
-    ; =========================================================================
+    ; -------------------------------------------------------------------------
+    ; Part 5: Establishing Hardwired Secondary 64-Bit System Registers (Hex Dumps)
+    ; -------------------------------------------------------------------------
     mov eax, 0x00002800          ; VMCS_GUEST_VMCS_LINK_POINTER
-    mov rbx, 0xFFFFFFFFFFFFFFFF 
+    mov rbx, 0xFFFFFFFFFFFFFFFF  ; Non-functional shadow reference mapping
     vmwrite rax, rbx             
 
     mov eax, 0x00002802          ; VMCS_GUEST_DEBUGCTL
@@ -320,7 +321,7 @@ Guest_area:
     vmwrite rax, rcx             
 
     mov eax, 0x00002806          ; VMCS_GUEST_EFER
-    mov ebx, 0x00000D01          ;Long Mode Active (LME/LMA/SCE)
+    mov ebx, 0x00000D01          ; Enforce Long Mode Active (LME/LMA/SCE flags combined)
     vmwrite rax, rbx             
 
     mov eax, 0x00002808          ; VMCS_GUEST_PERF_GLOBAL_CTRL
@@ -338,9 +339,10 @@ Guest_area:
     mov eax, 0x00002810          ; VMCS_GUEST_PDPTE3
     vmwrite rax, rcx             
 
-    ; =========================================================================
-    ; חלק 6: הגדרת גבולות (Limits) ובסיסים (Bases) של מרחב הזיכרון השטוח
-    ; =========================================================================
+    ; -------------------------------------------------------------------------
+    ; Part 6: Defining Flat Memory Addressing Boundaries (Limits and Bases)
+    ; -------------------------------------------------------------------------
+
     mov ebx, 0xFFFFFFFF          
 
     mov eax, 0x00004402          ; VMCS_GUEST_CS_LIMIT 
@@ -406,9 +408,8 @@ Guest_area:
     add eax, 2                   ; VMCS_GUEST_SYSENTER_EIP
     vmwrite rax, rcx             ; 0x6826
 
-    ; =========================================================================
     ; (GDTR/IDTR) Host Guest
-    ; =========================================================================
+   
     sub rsp, 16
     sgdt [rsp]                   ; GDT 
     mov rbx, [rsp + 2]           ; GDT Base 
@@ -457,7 +458,7 @@ Guest_area:
     mov eax, 0x00006830          ; VMCS_GUEST_IA32_LBR_CTL
     vmwrite rax, rcx             
 
-mov eax, 0x686C           ; CHECK   0x686C
+mov eax, 0x686C                  ; 0x686C
 mov edx, 3
 
 .guest_cet_loop:
@@ -482,7 +483,7 @@ mov eax, 0x00004832 ; VMCS_CTRL_VMX_PREEMPTION_TIMER_VALUE  0x4832
 vmwrite rax, rcx
 
 mov eax, 0x00000810     ;0x0810
-mov edx, 2                                                    ; CHECK
+mov edx, 2                                                   
 .loop_pair_1:
 
 vmwrite rax, rcx
@@ -491,12 +492,12 @@ dec edx
 jnz .loop_pair_1
 
 mov eax, 0x0000280A        ;0x280A
-mov edx, 4                                                    ; CHECK
+mov edx, 4                                                    
 .loop_pair_2:
 
 vmwrite rax, rcx
 add eax, 2
-dec edx                                                       ; CHECK
+dec edx                                                     
 jnz .loop_pair_2
 
 jmp $ ;DEBUGGING 
@@ -531,17 +532,17 @@ VM_Execution_Control_Fields:
     or  eax, 0x00000846             ;  EPT(1), Descriptor Tables(2), WBINVD(6), RDRAND(11) 0x0846
     and eax, edx            
 
-    mov ecx, 0x0000401E             ; VMCS Encode Secondary Controls [zRjldk]   0x401E
+    mov ecx, 0x0000401E             ; VMCS Encode Secondary Controls    0x401E
     vmwrite rcx, rax              
 
-    mov ecx, 0x49F                  ; IA32_VMX_PROCBASED_CTLS3 [zRjldk]    0x49F
+    mov ecx, 0x49F                  ; IA32_VMX_PROCBASED_CTLS3     0x49F
     rdmsr                           
 
     and eax, edx                
     or  eax, 0x00000000             
     and eax, edx            
 
-    mov ecx, 0x00004022             ; VMCS Encode Tertiary Controls [zRjldk]    0x4022
+    mov ecx, 0x00004022             ; VMCS Encode Tertiary Controls    0x4022
     vmwrite rcx, rax                
 
 Suffocate_APIC_Interrupts:
@@ -565,10 +566,10 @@ Suffocate_Exceptions_And_Registers:
     vmwrite rax, rbx                
 
 Setup_EPT_Pointer_Hardware:
-    mov rbx, rdi                        ;CHECK      
+    mov rbx, rdi                            
     or  rbx, 0x7E            
     mov eax, 0x0000201A             ;  EPT Pointer (EPTP) 
-    vmwrite rax, rbx                                ; <---------------------- MISTAKE HERE        
+    vmwrite rax, rbx                                     
 
 Suffocate_VM_Functions:
     xor edx, edx               
@@ -606,7 +607,7 @@ Suffocate_PASID_Timeout_And_SEAM:
 
 Suffocate_APIC_Timer:
     mov eax, 0x0000203A             ; Guest Deadline Shadow   0x203A
-    vmwrite rax, rbx                   ; <------------------------------------- MISTAKE HERE          
+    vmwrite rax, rbx                           
 
 ;----------------- PART 5: VM-Exit Control Fields -----------------
 init_secondary_and_msr_controls:
@@ -637,7 +638,7 @@ init_secondary_and_msr_controls:
 
 configure_vmcs_raw:
     ; --- Notification Vector ---
-    mov eax, 0x0002                     ; CHECK
+    mov eax, 0x0002                     
     mov ebx, 0x0002         
     vmwrite rax, rbx        
 
@@ -651,7 +652,7 @@ configure_vmcs_raw:
   mov ecx, 0x48C                  ; IA32_VMX_TRUE_ENTRY_CTLS MSR
     rdmsr                          
 
-    mov ebx, 0x204                      ; CHECK HERE
+    mov ebx, 0x204                    
     and ebx, edx                  
     or  ebx, eax           
 
@@ -669,12 +670,12 @@ configure_vmcs_raw:
 
 configure_vmcs_64bit_controls_raw:
     ; --- IO-A 
-    mov eax, 0x2000                     ; 0x2000                      ; CHECK
+    mov eax, 0x2000                     ; 0x2000                      
     mov ebx, 0x00081000     
     vmwrite rax, rbx
 
     ; --- IO-B 
-    add eax, 2                          ; 0x2002                           ;CHECK
+    add eax, 2                          ; 0x2002                           
     mov ebx, 0x00082000             
     vmwrite rax, rbx
 
@@ -694,12 +695,12 @@ configure_vmcs_64bit_controls_raw:
     vmwrite rax, rbx
 
     ; --- MSR
-    add eax, 2                          ; 0x200a                                                   ; CHECK    
+    add eax, 2                          ; 0x200a                                                     
     vmwrite rax, rbx    
 
     ; --- VMCS 
-    add eax, 2                          ; 0x200c                                                   ; CHECK
-    mov rbx, 0xffffffffffffffff ;Executive VMCS)
+    add eax, 2                          ; 0x200c                                                  
+    mov rbx, 0xffffffffffffffff 
     vmwrite rax, rbx
 
     ; EPT
@@ -866,7 +867,7 @@ configure_vmcs_32bit_controls_raw:
     mov dword [rdi + 4], 0
     mov qword [rdi + 8], 0x500
       
-    mov eax, 0x0000200A          ; HOST_IA32_MSR_LOAD_ADDR [Chapter 24]
+    mov eax, 0x0000200A          ; HOST_IA32_MSR_LOAD_ADDR 
     mov ebx, 0x00007000      
     vmwrite rax, rbx
 
