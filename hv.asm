@@ -64,7 +64,7 @@ vmwrite rax, rbx
     vmwrite rax, rbx
 
     mov eax, 0x00006C16          ; HOST_RIP 
-    mov ebx, VM_Exit_Handler                                     ; <-------------------------------------- NEEDS TO BE USED 
+    mov ebx, VM_Exit_Handler                                 
     vmwrite rax, rbx
 
 mov rbx, cs
@@ -126,7 +126,7 @@ vmwrite rax, rbx
     vmwrite rbx, rax
 
     mov eax, 0x00004012          ; VM_ENTRY_CONTROLS [Chapter 24]
-    mov ebx, 0x00000200             ;CHECK
+    mov ebx, 0x00000200             
     vmwrite rax, rbx                       
 
     mov eax, 0x00006C06          ; HOST_FS_BASE
@@ -143,7 +143,7 @@ vmwrite rax, rbx
     mov eax, 0x00006C0C          ; HOST_GDTR_BASE 
     sub rsp, 10                 
     sgdt [rsp]                   
-    mov rbx, [rsp + 2]           ;Check it 
+    mov rbx, [rsp + 2]            
     add rsp, 10                  
     vmwrite rax, rbx             
 
@@ -153,11 +153,11 @@ vmwrite rax, rbx
    
 
     mov eax, 0x0000201A          ; EPT_POINTER 
-    mov ebx, 0x0000601E                 ; <-------------------------------- USE IT EPT POINTER
+    mov ebx, 0x0000601E           ;0x201A
     vmwrite rax, rbx             
 
     mov eax, 0x00006C0E          ; HOST_IDTR_BASE
-    lea rbx, [rel host_idt_table]       ; <-------------------------------- MISTAKE HERE 
+    lea rbx, [rel host_idt_table]       
     vmwrite rax, rbx                        
 
 mov ecx, 0xC0000080      
@@ -182,7 +182,7 @@ mov eax, 0x00002C04
 vmwrite rax, rdx             
 
 
-    mov eax, 0x00006C18          ; HOST_IA32_S_CET [Chapter 27]
+    mov eax, 0x00006C18          ; HOST_IA32_S_CET 
     mov ecx, 4                 
 
 .host_security_loop:
@@ -190,12 +190,12 @@ vmwrite rax, rdx
     add eax, 2                   
     loop .host_security_loop   
 
-    mov eax, 0x00004C04          ; HOST_IA32_PERF_GLOBAL_CTRL [Chapter 27]
+    mov eax, 0x00004C04          ; HOST_IA32_PERF_GLOBAL_CTRL 
     vmwrite rax, rcx            
 
-    mov eax, 0x00004010          ; VM_EXIT_MSR_LOAD_COUNT [Chapter 24]
+    mov eax, 0x00004010          ; VM_EXIT_MSR_LOAD_COUNT
     add ecx, 1              
-    vmwrite rax, rcx             ; <---------------------------------------- MISTAKE HERE          
+    vmwrite rax, rcx                      
 
     jmp $ ;DEBUGGING HOST 
 
@@ -212,7 +212,7 @@ Guest_area:
     add rsp, 16              
 
     mov eax, 0x00006818          ; VMCS_GUEST_IDTR_BASE 
-    vmwrite rax, rbx                                    ;CHECK
+    vmwrite rax, rbx                                   
 
     mov eax, 0x00002000          ; VMCS_GUEST_CR0_GUEST_HOST_MASK 
     mov ebx, 0xFFFFFFFF         
@@ -224,7 +224,7 @@ Guest_area:
 
     mov eax, 0x00004002          ; CPU_BASED_VM_EXEC_CONTROLS 
     vmread rbx, rax              
-    or ebx, (1 << 15) | (1 << 16)           ;CHECK  
+    or ebx, (1 << 15) | (1 << 16)         
     vmwrite rax, rbx           
 
     mov eax, 0x0000400A          ; VMCS_CTRL_CR3_TARGET_COUNT 
