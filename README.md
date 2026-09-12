@@ -45,7 +45,6 @@ boot_middle:
     mov es, ax
     mov ss, ax
 
-    ; הפעלת קו A20
     in al, 0x92        
     or al, 2           
     out 0x92, al
@@ -55,10 +54,12 @@ boot_middle:
     xor eax, eax
     rep stosd
 
-    mov dword [0x1000], 0x2003     ; PML4 (0x1000) -> מצביע ל-PDPT ב-0x2000
-    mov dword [0x2000], 0x3003     ; PDPT (0x2000) -> מצביע ל-PD ב-0x3000
-    mov dword [0x3000], 0x00000083 ; PD (0x3000) -> ממפה דף ענק של 2MB החל מכתובת 0 (ביט 7 דלוק)
-
+    mov dword [0x1000], 0x2003     ; PML4 (0x1000) -> PDPT
+    mov dword [0x2000], 0x3003     ; PDPT (0x2000) -> PD
+    mov dword [0x3000], 0x4003 ; PD (0x3000) -> PT
+    mov dword [0x3008], 0x5003 ; PT -> 1
+    mov dword [0x6008], 0x6003 ; PT -> 2
+    
 switch_to_long_mode:
     mov eax, 0x1000             
     mov cr3, eax                
